@@ -69,7 +69,7 @@ func replaceChain(newBlocks []Block) {
 		Blockchain = newBlocks
 	}
 }
-
+ 
 func run() error {
 	mux := makeMuxRouter()
 	httpAddr := os.Getenv("ADDR")
