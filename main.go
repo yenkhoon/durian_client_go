@@ -152,37 +152,20 @@ func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload i
 }
 
 func main() {
-	conn, err := net.Dial("tcp", "0.0.0.0:1234")
+	c, err := net.Dial("tcp", "0.0.0.0:3333")
 	if err != nil {
-		// handle error
-	}
-
-	callClient(context.Background(), conn)
-
-	// err := godotenv.Load()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-
-	// go func() {
-	// 	t := time.Now()
-	// 	genesisBlock := Block{0, t.String(), 0, "", ""}
-	// 	spew.Dump(genesisBlock)
-	// 	Blockchain = append(Blockchain, genesisBlock)
-	// }()
-	// log.Fatal(run())
-
-}
-
-func callClient(ctx context.Context, c net.Conn) error {
-	// Create a connection that we can use to get the HashFactory.
-	bz, err := ioutil.ReadFile("token.wasm")
-	if err != nil {
-		return err
+		panic(err)
 	}
 
 	conn := rpc.NewConn(rpc.StreamTransport(c))
 	defer conn.Close()
+	ctx := context.Background()
+
+	// Create a connection that we can use to get the HashFactory.
+	bz, err := ioutil.ReadFile("token.wasm")
+	if err != nil {
+		panic(err)
+	}
 
 	_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
 	if err != nil {
@@ -192,20 +175,22 @@ func callClient(ctx context.Context, c net.Conn) error {
 	if err != nil {
 		panic(err)
 	}
-	tx.SetSender([]byte("abc"))
-	tx.SetGas([]byte{1, 2})
+	tx.SetSender([]byte("abcdeabcdeabcdeabcde"))
+	tx.SetGas([]byte{1, 2, 1, 1, 1, 1, 1})
 	tx.SetGasPrice([]byte{0})
-	tx.SetValue([]byte{1})
-	tx.SetArgs([]byte{5,6})
+	tx.SetValue([]byte{0})
+	tx.SetArgs([]byte("abcdeabcdeabcdeabcdeabcdeabcdeababcdeabcdeabcdeabcdeabcdeabcdeab"))
 	action := tx.Action().Create()
 	action.SetCode(bz)
-	action.SetSalt([]byte{0})
-
+	action.SetSalt([]byte("abcdeabcdeabcdeabcdeabcdeabcdeab"))
 
 	//tx.Set
 	executor := durian.Executor{Client: conn.Bootstrap(ctx)}
+	var provider Provider
+
 	s := executor.Execute(ctx, func(p durian.Executor_execute_Params) error {
 		p.SetTransaction(tx)
+		p.SetProvider(durian.Provider_ServerToClient(provider))
 		return nil
 	})
 
@@ -219,9 +204,9 @@ func callClient(ctx context.Context, c net.Conn) error {
 	res, err := s.ResultData().Struct()
 	if err != nil {
 		fmt.Println(err)
-		return err
+		panic(err)
 	}
 	fmt.Println(res.Data())
 
-	return nil
+	return
 }
