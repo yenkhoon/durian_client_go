@@ -1,18 +1,24 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/durian-client-go/durian"
 	"github.com/gorilla/mux"
-	"github.com/joho/godotenv"
+	capnp "zombiezen.com/go/capnproto2"
+	"zombiezen.com/go/capnproto2/rpc"
 )
 
 type Block struct {
@@ -69,7 +75,7 @@ func replaceChain(newBlocks []Block) {
 		Blockchain = newBlocks
 	}
 }
- 
+
 func run() error {
 	mux := makeMuxRouter()
 	httpAddr := os.Getenv("ADDR")
@@ -146,17 +152,76 @@ func respondWithJSON(w http.ResponseWriter, r *http.Request, code int, payload i
 }
 
 func main() {
-	err := godotenv.Load()
+	conn, err := net.Dial("tcp", "0.0.0.0:1234")
 	if err != nil {
-		log.Fatal(err)
+		// handle error
 	}
 
-	go func() {
-		t := time.Now()
-		genesisBlock := Block{0, t.String(), 0, "", ""}
-		spew.Dump(genesisBlock)
-		Blockchain = append(Blockchain, genesisBlock)
-	}()
-	log.Fatal(run())
+	callClient(context.Background(), conn)
 
+	// err := godotenv.Load()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	// go func() {
+	// 	t := time.Now()
+	// 	genesisBlock := Block{0, t.String(), 0, "", ""}
+	// 	spew.Dump(genesisBlock)
+	// 	Blockchain = append(Blockchain, genesisBlock)
+	// }()
+	// log.Fatal(run())
+
+}
+
+func callClient(ctx context.Context, c net.Conn) error {
+	// Create a connection that we can use to get the HashFactory.
+	bz, err := ioutil.ReadFile("token.wasm")
+	if err != nil {
+		return err
+	}
+
+	conn := rpc.NewConn(rpc.StreamTransport(c))
+	defer conn.Close()
+
+	_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+	if err != nil {
+		panic(err)
+	}
+	tx, err := durian.NewTransaction(seg)
+	if err != nil {
+		panic(err)
+	}
+	tx.SetSender([]byte("abc"))
+	tx.SetGas([]byte{1, 2})
+	tx.SetGasPrice([]byte{0})
+	tx.SetValue([]byte{1})
+	tx.SetArgs([]byte{5,6})
+	action := tx.Action().Create()
+	action.SetCode(bz)
+	action.SetSalt([]byte{0})
+
+
+	//tx.Set
+	executor := durian.Executor{Client: conn.Bootstrap(ctx)}
+	s := executor.Execute(ctx, func(p durian.Executor_execute_Params) error {
+		p.SetTransaction(tx)
+		return nil
+	})
+
+	//s.Client()
+	fmt.Println(s)
+
+	// err = capnp.NewEncoder(os.Stdout).Encode(msg)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	res, err := s.ResultData().Struct()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	fmt.Println(res.Data())
+
+	return nil
 }
